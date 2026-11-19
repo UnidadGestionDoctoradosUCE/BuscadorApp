@@ -1,174 +1,167 @@
-# AppBuscador - Sistema de Gestión de Doctorados
+# BuscadorApp — Sistema de Gestión Documental (UCE)
 
-## Descripción
-Sistema modular para la búsqueda y gestión de documentos de doctorados y oficios de la Universidad Central del Ecuador.
+Aplicación de escritorio nativa para Windows desarrollada en **Python + Flet (Flutter Desktop)** para la búsqueda, consulta y descarga de expedientes de **Doctorados** y **Oficios** de la Universidad Central del Ecuador.
 
-## Estructura del Proyecto
+Cuenta con diseño **Glassmorphism**, transiciones fluidas (`AnimatedSwitcher`), **modo Claro / Oscuro dinámico con persistencia**, diseño **100% responsive** para cualquier tamaño de pantalla, caché local inteligente y empaquetado en ejecutable `.exe` autocontenido.
 
-```
-AppBuscador/
-├── main.py                          # Punto de entrada principal
-├── Buscador.py                      # [LEGACY] Script original (mantener como referencia)
+---
+
+## 1. Estructura del Proyecto
+
+```text
+BuscadorApp/
+├── main.py                      # Punto de entrada principal, navegación, responsive y tema dinámico
+├── compilar_flet.bat            # Script rápido para compilar el ejecutable AppBuscador.exe
+├── requirements.txt             # Dependencias de Python del proyecto
+├── README.md                    # Documentación única de desarrollo, compilación y mantenimiento
 ├── config/
 │   ├── __init__.py
-│   └── settings.py                  # Configuración global, rutas, constantes
-├── models/
-│   └── __init__.py                  # (Reservado para futuros modelos de datos)
+│   └── settings.py              # Estado global, glosario items_clave y persistencia de rutas/tema
+├── data/
+│   ├── cifrador.py              # CLI para registrar o actualizar usuarios con SHA-256
+│   └── usuarios.json            # Base de usuarios autorizados (credenciales cifradas)
+├── imagenes/
+│   ├── logouce.png              # Logo principal e ícono de la aplicación
+│   └── logouce3.png             # Emblema para Splash Screen y estado inicial
 ├── services/
 │   ├── __init__.py
-│   ├── auth_service.py              # Servicio de autenticación
-│   ├── file_service.py              # Operaciones con archivos
-│   └── search_service.py            # Lógica de búsqueda
-├── ui/
+│   ├── cache_service.py         # Caché inteligente (~/.buscadorapp/cache_documentos.json)
+│   ├── file_service.py          # Escaneo físico de PDFs y clasificación por glosario
+│   └── search_service.py        # Búsqueda difusa tolerante a tildes y filtros dependientes
+├── ui_flet/
 │   ├── __init__.py
-│   ├── styles.py                    # Estilos y temas de UI
+│   ├── services_bridge.py       # Puente de lógica (auth SHA-256, abrir PDFs, crear ZIPs)
+│   ├── theme.py                 # Paletas Claro/Oscuro, Glassmorphism, diálogos y helpers UI
 │   ├── components/
 │   │   ├── __init__.py
-│   │   ├── header.py                # Componente de encabezado
-│   │   ├── filters.py               # Componentes de filtros
-│   │   ├── results.py               # Componente de resultados
-│   │   └── details.py               # Componente de detalles
+│   │   └── config_dialog.py     # Modal de configuración de rutas Drive y apariencia
 │   └── views/
 │       ├── __init__.py
-│       ├── login_view.py            # Vista de login
-│       ├── docentes_view.py         # Vista principal de docentes
-│       └── oficios_view.py          # Vista de oficios
-├── utils/
-│   ├── __init__.py
-│   ├── file_utils.py                # Utilidades para archivos
-│   └── path_utils.py                # Utilidades para rutas
-├── data/
-│   ├── cifrador.py                  # Script para hashear contraseñas
-│   └── usuarios.json                # Base de datos de usuarios
-└── imagenes/
-    └── logouce.png                  # Logo de la universidad
+│       ├── splash_view.py       # Pantalla inicial con detección automática de Drive
+│       ├── login_view.py        # Inicio de sesión institucional
+│       ├── loading_view.py      # Bienvenida post-login y precalentamiento del caché
+│       ├── selection_view.py    # Panel ejecutivo con KPIs y selector de módulos
+│       ├── docentes_view.py     # Módulo de Doctorados (tabla izquierda + filtros derecha)
+│       ├── oficios_view.py      # Módulo de Oficios (filtros izquierda + tabla derecha)
+│       └── acerca_de_view.py    # Información técnica y créditos
+└── utils/
+    ├── __init__.py
+    ├── file_utils.py            # resource_path() compatible con PyInstaller y estructura oficios
+    ├── path_utils.py            # Auto-detección de carpetas de Google Drive en unidades locales
+    └── text_utils.py            # Normalización de texto y coincidencia difusa
 ```
 
-## Características
+---
 
-### Modularización
-- **Separación de responsabilidades**: Cada módulo tiene una función específica
-- **Reutilización de código**: Componentes UI y servicios reutilizables
-- **Mantenibilidad**: Código organizado y fácil de mantener
-- **Escalabilidad**: Fácil agregar nuevas funcionalidades
+## 2. Requisitos Previos e Instalación (Desarrollo)
 
-### Módulos Principales
+- **Sistema Operativo:** Windows 10 u 11 (64 bits).
+- **Python:** 3.10 – 3.13 (probado con **Python 3.13.4**).
 
-#### Config
-- `settings.py`: Variables globales, constantes y configuración
+Instala las dependencias desde la raíz del proyecto:
 
-#### Services
-- `auth_service.py`: Autenticación de usuarios con SHA-256
-- `file_service.py`: Carga, apertura y descarga de documentos
-- `search_service.py`: Búsqueda y filtrado de documentos
-
-#### UI Components
-- `header.py`: Encabezado con logo y botones
-- `filters.py`: Filtros de búsqueda (universidad, programa, estudiante, etc.)
-- `results.py`: Treeview de resultados
-- `details.py`: Panel de detalles de documentos
-
-#### UI Views
-- `login_view.py`: Pantalla de login y selección de módulo
-- `docentes_view.py`: Vista completa del módulo de docentes
-- `oficios_view.py`: Vista completa del módulo de oficios
-
-#### Utils
-- `path_utils.py`: Búsqueda de rutas de Google Drive
-- `file_utils.py`: Utilidades para recursos y estructura de archivos
-
-## Instalación
-
-### Requisitos
-```bash
-pip install tkinter pillow PyMuPDF
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-### Ejecución
-```bash
+*(Opcional recomendado)*: trabajar dentro de un entorno virtual:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+---
+
+## 3. Ejecución en Modo Desarrollo
+
+Desde la raíz del proyecto:
+
+```powershell
 python main.py
 ```
 
-## Compilación a Ejecutable
+---
 
-Para distribuir la aplicación en computadoras sin Python instalado:
+## 4. Creación del Ejecutable (`.exe`) y Distribución
 
-### Método Rápido
-```bash
-# 1. Instalar PyInstaller
-pip install pyinstaller
+### Opción A: Usando el script automático
+Haz doble clic o ejecuta en PowerShell:
 
-# 2. Ejecutar script de compilación
-build.bat
+```powershell
+.\compilar_flet.bat
 ```
 
-El ejecutable estará en `dist/AppBuscador.exe`
-
-### Documentación Completa
-- **Guía rápida**: Ver [COMPILACION_RAPIDA.md](COMPILACION_RAPIDA.md)
-- **Guía completa**: Ver [GUIA_EJECUTABLE.md](GUIA_EJECUTABLE.md)
-
-### Archivos de Compilación
-- `build.bat`: Script automatizado de compilación
-- `AppBuscador.spec`: Configuración de PyInstaller
-- `requirements-build.txt`: Dependencias para compilar
-
-## Mantenimiento y Limpieza
-
-Para mantener el proyecto limpio de archivos temporales y caché:
-
-### Limpieza Automática
-```bash
-.\clean.bat
+### Opción B: Comando manual
+```powershell
+flet pack main.py --name "AppBuscador" --icon "imagenes\logouce.png" --add-data "imagenes;imagenes" --add-data "data;data" -y
 ```
 
-### Documentación de Limpieza
-- **Guía completa**: Ver [GUIA_LIMPIEZA.md](GUIA_LIMPIEZA.md)
+El ejecutable final se genera en:
 
+```text
+dist\AppBuscador.exe
+```
 
+### Cómo distribuirlo en otras computadoras
+1. Copia únicamente el archivo **`dist\AppBuscador.exe`** a las computadoras destino (no requiere Python instalado ni librerías adicionales).
+2. Al abrirlo por primera vez, el sistema detecta automáticamente las unidades montadas de Google Drive (`G:\Mi unidad\...`, `H:\Mi unidad\...`, etc.).
+3. Si en una máquina la ruta es distinta, abre **Ajustes** (desde la pantalla de Selección) y utiliza **Examinar** o **Auto-detectar Drive**.
 
-## Uso
+> **Nota sobre rutas empaquetadas:** El archivo `data\usuarios.json` e `imagenes\` quedan incrustados dentro del `.exe` y se leen mediante `utils.file_utils.resource_path(...)`. La configuración editable por el usuario y el caché se guardan en el perfil de Windows para persistir entre ejecuciones.
 
-1. **Login**: Ingresa tus credenciales de usuario
-2. **Selección de Módulo**: Elige entre Docentes u Oficios
-3. **Búsqueda**: Usa los filtros y campo de búsqueda
-4. **Acciones**: 
-   - Abrir PDF
-   - Descargar PDF
-   - Descargar expediente completo (solo docentes)
+---
 
-## Ventajas de la Nueva Estructura
+## 5. Guía de Mantenimiento y Actualización para Futuras Versiones
 
-### Antes (Monolítico)
-- ❌ 1392 líneas en un solo archivo
-- ❌ 68 funciones mezcladas
-- ❌ Variables globales dispersas
-- ❌ Difícil de mantener y escalar
+### 5.1. Agregar o actualizar usuarios de acceso
+Los usuarios están almacenados con hash SHA-256 en `data/usuarios.json`. Nunca edites los hashes a mano; utiliza el asistente CLI incluido:
 
-### Ahora (Modular)
-- ✅ Código organizado en 20+ archivos
-- ✅ Separación clara de responsabilidades
-- ✅ Componentes reutilizables
-- ✅ Fácil de mantener y extender
-- ✅ Mejor legibilidad
-- ✅ Facilita el trabajo en equipo
+```powershell
+python data/cifrador.py
+```
 
-## Futuras Mejoras
+Introduce el nombre completo, el nombre de usuario y la contraseña. Si el usuario ya existe, actualiza su contraseña y nombre sin afectar a los demás registros. Luego **recompila el `.exe`** para que el nuevo `usuarios.json` quede incluido.
 
-- [ ] Agregar logging
-- [ ] Implementar tests unitarios
-- [ ] Agregar manejo de errores mejorado
-- [ ] Crear modelos de datos con clases
-- [ ] Implementar caché de búsquedas
-- [ ] Agregar exportación a Excel
-- [ ] Implementar búsqueda avanzada
+### 5.2. Agregar nuevos ítems clave o tipos de documentos
+En `config/settings.py`, edita el diccionario `items_clave`:
 
-## Notas
+```python
+items_clave = {
+    ...
+    "30. Nuevo Documento": ["palabraclave1", "palabraclave2"],
+}
+```
 
-- El archivo `Buscador.py` original se mantiene como referencia
-- Todas las funcionalidades del código original están preservadas
-- La nueva estructura facilita futuras implementaciones
+> **Importante:** Cada vez que agregues un nuevo ítem clave o modifiques aliases, el usuario debe pulsar **"Sincronizar Documentos"** dentro del módulo de Docentes para reconstruir el caché con la nueva clasificación.
 
-## Autor
+### 5.3. Personalizar colores, tema Claro/Oscuro o estilo Glassmorphism
+Todo el sistema visual está centralizado en `ui_flet/theme.py`:
+- `LIGHT_PALETTE` y `DARK_PALETTE`: definen fondos, bordes, encabezados de tabla, acentos y opacidades glass.
+- `crear_glass_card(...)`: controla el desenfoque (`blur_sigma`) y sombras de las tarjetas.
+- `crear_fondo_ambiental(...)`: controla el gradiente base y los orbes ambientales.
 
-Universidad Central del Ecuador - Unidad de Gestión de Doctorados
+### 5.4. Dónde se guardan los datos persistentes en cada máquina
+- **En modo ejecutable (`.exe`):** `%USERPROFILE%\.buscadorapp\settings.json` (rutas de Drive y tema `"light"` / `"dark"`).
+- **En modo desarrollo (`python main.py`):** `data\settings.json`.
+- **Caché de documentos indexados:** `%USERPROFILE%\.buscadorapp\cache_documentos.json`.
+
+### 5.5. Cómo crear nuevas pantallas o modificar vistas
+1. Todas las vistas viven en `ui_flet/views/` e implementan `build()`, `on_mount()` y `dispose()` (para cancelar timers o hilos de fondo).
+2. Si deseas que la vista responda a cambios de tamaño de ventana, implementa `on_resize(self, width, height, update_ui=True)` — `AppFlet` en `main.py` lo invoca automáticamente con debounce.
+3. Si deseas que el cambio de tema Claro/Oscuro en vivo conserve los filtros o búsqueda de la vista, implementa `get_state()` y `restore_state(state)`.
+4. Usa `ui_flet/services_bridge.py` o `services/` para toda la lógica; **nunca importes `tkinter`** en ninguna capa.
+5. Para publicar una nueva versión:
+   - Actualiza el número de versión en `ui_flet/views/acerca_de_view.py`, `splash_view.py` y `login_view.py`.
+   - Ejecuta las comprobaciones de sintaxis (`python -m py_compile main.py ...`).
+   - Ejecuta `compilar_flet.bat` y prueba el archivo resultante `dist\AppBuscador.exe` antes de distribuirlo.
+
+---
+
+## 6. Solución Rápida de Problemas
+
+- **Drive aparece como "Drive Desconectado":** Verifica que **Google Drive para escritorio** esté abierto e iniciado sesión en Windows, o configura manualmente las carpetas desde **Ajustes**.
+- **Los documentos recién subidos a Drive no aparecen:** Haz clic en el botón verde **Sincronizar Documentos** para invalidar el caché y re-escanear las carpetas.
+- **No se ven cambios tras modificar `usuarios.json` en el `.exe`:** Recuerda ejecutar `compilar_flet.bat` nuevamente después de editar archivos dentro de `data/` o `imagenes/`.
+- **Error `flet` no reconocido al compilar:** Ejecuta `python -m flet.cli pack ...` o asegúrate de tener activo el entorno de Python donde instalaste `requirements.txt`.

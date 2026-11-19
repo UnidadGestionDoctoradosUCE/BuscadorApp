@@ -1,18 +1,59 @@
-import json
+"""
+Utilidad CLI para agregar o actualizar usuarios con contraseña cifrada en SHA-256
+dentro de data/usuarios.json sin re-hashear los usuarios existentes.
+Uso: python data/cifrador.py
+"""
+import getpass
 import hashlib
+import json
+import os
 
-ruta_json = r'C:\Users\VIVTUS\Pictures\BuscadorApp\data\usuarios.json'
 
-with open(ruta_json, 'r', encoding='utf-8') as f:
-    usuarios = json.load(f)
+def hash_sha256(texto: str) -> str:
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
 
-for u in usuarios:
-    usuario_plano = u['usuario']
-    password_plano = u['contrasena']
-    u['usuario'] = hashlib.sha256(usuario_plano.encode('utf-8')).hexdigest()
-    u['contrasena'] = hashlib.sha256(password_plano.encode('utf-8')).hexdigest()
 
-with open(ruta_json, 'w', encoding='utf-8') as f:
-    json.dump(usuarios, f, indent=2, ensure_ascii=False)
+def main():
+    ruta_json = os.path.join(os.path.dirname(os.path.abspath(__file__)), "usuarios.json")
+    if os.path.exists(ruta_json):
+        with open(ruta_json, "r", encoding="utf-8") as f:
+            usuarios = json.load(f)
+    else:
+        usuarios = []
 
-print("Archivo JSON actualizado con usuarios y contraseñas hasheadas.")
+    print("=== Gestión de Usuarios - BuscadorApp ===")
+    nombre = input("Nombre completo para mostrar (ej. Dra. María Pérez): ").strip()
+    usuario = input("Nombre de usuario (login): ").strip()
+    contrasena = getpass.getpass("Contraseña: ").strip()
+
+    if not nombre or not usuario or not contrasena:
+        print("[ERROR] Todos los campos son obligatorios.")
+        return
+
+    user_hash = hash_sha256(usuario)
+    pass_hash = hash_sha256(contrasena)
+
+    actualizado = False
+    for entry in usuarios:
+        if entry.get("usuario") == user_hash:
+            entry["nombre"] = nombre
+            entry["contrasena"] = pass_hash
+            actualizado = True
+            break
+
+    if not actualizado:
+        usuarios.append({
+            "usuario": user_hash,
+            "contrasena": pass_hash,
+            "nombre": nombre,
+        })
+
+    with open(ruta_json, "w", encoding="utf-8") as f:
+        json.dump(usuarios, f, indent=2, ensure_ascii=False)
+
+    accion = "actualizado" if actualizado else "registrado"
+    print(f"[OK] Usuario '{nombre}' {accion} correctamente en {ruta_json}.")
+
+
+if __name__ == "__main__":
+    main()

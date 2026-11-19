@@ -1,2 +1,7 @@
-build/AppBuscador/AppBuscador.pkg
+__pycache__/
+*.py[cod]
 build/
+dist/
+*.spec
+generated-*.ico
+data/settings.json

@@ -1,7 +1,6 @@
 """
 Servicio de búsqueda de documentos y oficios
 """
-from tkinter import messagebox
 import config.settings as settings
 from utils.text_utils import normalizar_texto, texto_contiene, coincidencia_difusa
 

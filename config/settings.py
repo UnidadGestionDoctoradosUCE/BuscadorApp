@@ -3,10 +3,14 @@ Configuración global de la aplicación
 Contiene constantes, rutas y variables de estado global
 """
 import os
+import sys
 import json
 
-# Ruta del archivo de configuración
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "settings.json")
+# Ruta del archivo de configuración (en ejecutable persistir en perfil de usuario)
+if getattr(sys, "frozen", False):
+    SETTINGS_FILE = os.path.join(os.path.expanduser("~"), ".buscadorapp", "settings.json")
+else:
+    SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "settings.json")
 
 # Tema global de la aplicación (light / dark)
 theme = "light"
@@ -80,6 +84,8 @@ def cargar_configuracion():
                 ruta_doctorados = config.get("ruta_doctorados", None)
                 ruta_oficios = config.get("ruta_oficios", None)
                 ruta_doctorados2 = config.get("ruta_doctorados2", None)
+                loaded_theme = config.get("theme", "light")
+                theme = loaded_theme if loaded_theme in ("light", "dark") else "light"
         except Exception as e:
             print(f"Error al cargar configuración: {e}")
 
@@ -88,19 +94,29 @@ def guardar_configuracion(r_doc, r_of, r_doc2, current_theme=None):
     ruta_doctorados = r_doc
     ruta_oficios = r_of
     ruta_doctorados2 = r_doc2
-    theme = "light"
-    
+    if current_theme in ("light", "dark"):
+        theme = current_theme
+    elif theme not in ("light", "dark"):
+        theme = "light"
+
     os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
     config = {
         "ruta_doctorados": ruta_doctorados,
         "ruta_oficios": ruta_oficios,
-        "ruta_doctorados2": ruta_doctorados2
+        "ruta_doctorados2": ruta_doctorados2,
+        "theme": theme,
     }
     try:
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Error al guardar configuración: {e}")
+
+
+def guardar_tema(nuevo_tema: str):
+    """Persiste el tema ('light' o 'dark') manteniendo las rutas configuradas."""
+    tema_valido = nuevo_tema if nuevo_tema in ("light", "dark") else "light"
+    guardar_configuracion(ruta_doctorados, ruta_oficios, ruta_doctorados2, current_theme=tema_valido)
 
 # Cargar configuración al importar el módulo
 cargar_configuracion()

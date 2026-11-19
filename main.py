@@ -1,181 +1,274 @@
 """
-Punto de entrada principal de la aplicación AppBuscador
-Aplicación modularizada para búsqueda de documentos de doctorados y oficios
+Punto de entrada principal de BuscadorApp usando Flet (Flutter Desktop).
+Incluye diseño responsive, Glassmorphism, transiciones con AnimatedSwitcher
+y modo Claro/Oscuro dinámico con persistencia.
 """
-import tkinter as tk
-from tkinter import messagebox
+import os
 import threading
-import time
-from ui.views.login_view import mostrar_login, cerrar_sesion
-from ui.views.selection_view import mostrar_seleccion
-from ui.views.docentes_view import mostrar_docentes, DocentesView
-from ui.views.oficios_view import mostrar_oficios, OficiosView
-from ui.views.acerca_de_view import mostrar_acerca_de, AcercaDeView
-from ui.views.splash_view import mostrar_splash
-from utils.path_utils import encontrar_rutas_drive
+from typing import Optional
+import flet as ft
+
 import config.settings as settings
+from ui_flet.theme import (
+    DARK_PALETTE,
+    LIGHT_PALETTE,
+    FilePickerHelper,
+    get_palette,
+    get_viewport_size,
+)
+from ui_flet.views.acerca_de_view import AcercaDeView
+from ui_flet.views.docentes_view import DocentesView
+from ui_flet.views.loading_view import LoadingView
+from ui_flet.views.login_view import LoginView
+from ui_flet.views.oficios_view import OficiosView
+from ui_flet.views.selection_view import SelectionView
+from ui_flet.views.splash_view import SplashView
+from utils.file_utils import resource_path
 
 
-class AppBuscador:
-    """Clase principal de la aplicación"""
-    
-    def __init__(self):
-        """Inicializa la aplicación"""
-        self.root = tk.Tk()
-        self.root.withdraw()
-        self.root.title("BuscadorApp")
-        
-        # Instancias de vistas (para mantener estado)
-        self.docentes_view = None
-        self.oficios_view = None
-        self.acerca_de_view = None
-        
-        # MOSTRAR SPLASH SCREEN EN LA MISMA VENTANA
-        self._mostrar_splash()
-    
-    def _mostrar_splash(self):
-        """Muestra el splash screen en la misma ventana"""
-        from ui.views.splash_view import mostrar_splash
-        self.splash = mostrar_splash(self.root)
-        self.splash.actualizar_mensaje("Inicializando...")
-        self.root.deiconify()
-        
-        # Luego de mostrar splash, hacer carga en background
-        self._iniciar_carga()
-    
-    def _iniciar_carga(self):
-        """Inicia la carga en background"""
-        self.splash.actualizar_mensaje("Cargando...")
-        
-        def cargar():
-            self._inicializar_rutas()
-            time.sleep(2)
-            self.root.after(0, self._cerrar_splash_y_login)
-        
-        threading.Thread(target=cargar, daemon=True).start()
-    
-    def _cerrar_splash_y_login(self):
-        """Cierra splash y muestra login"""
-        from ui.views.login_view import mostrar_login
-        
-        self.root.withdraw()
-        self.root.overrideredirect(False)
-        self.root.attributes('-topmost', False)
-        
-        # Detener temporizadores del splash
-        if hasattr(self, 'splash') and self.splash:
-            try:
-                self.splash.stop()
-            except Exception as e:
-                print(f"Error al detener splash: {e}")
-        
-        # Destruir widgets del splash
-        for widget in self.root.winfo_children():
-            widget.destroy()
-            
-        mostrar_login(self.root, self.on_login_success)
-        
-        self.root.update_idletasks()
-        self.root.deiconify()
-    
-    def _inicializar_rutas(self):
-        """Inicializa las rutas de Google Drive"""
-        self._reintentar_rutas()
-        print("\n" + "="*60)
-        print("INICIALIZACIÓN DE RUTAS")
-        print("="*60)
-        print(f"ruta_doctorados:  {settings.ruta_doctorados if settings.ruta_doctorados else 'NO ENCONTRADA'}")
-        print(f"ruta_oficios:     {settings.ruta_oficios if settings.ruta_oficios else 'NO ENCONTRADA'}")
-        print(f"ruta_doctorados2: {settings.ruta_doctorados2 if settings.ruta_doctorados2 else 'NO ENCONTRADA'}")
-        print("="*60 + "\n")
-    
-    def _reintentar_rutas(self):
-        if not settings.ruta_doctorados or not settings.ruta_oficios or not settings.ruta_doctorados2:
-            r_doc, r_of, r_doc2 = encontrar_rutas_drive()
-            if not settings.ruta_doctorados:
-                settings.ruta_doctorados = r_doc
-            if not settings.ruta_oficios:
-                settings.ruta_oficios = r_of
-            if not settings.ruta_doctorados2:
-                settings.ruta_doctorados2 = r_doc2
-    
-    def on_login_success(self, ventana, nombre_usuario):
-        mostrar_seleccion(ventana, nombre_usuario, 
-                         lambda: self.mostrar_modulo_docentes(ventana),
-                         lambda: self.mostrar_modulo_oficios(ventana),
-                         lambda: self.mostrar_acerca_de(ventana))
-    
-    def mostrar_modulo_docentes(self, ventana):
-        if self.docentes_view is not None:
-            try:
-                self.docentes_view.cerrar()
-            except:
-                pass
-        self.docentes_view = None
-        
-        self.docentes_view = DocentesView(
-            ventana,
-            lambda: self.volver_a_seleccion(ventana),
-            lambda: self.cerrar_sesion_handler(ventana)
+class AppFlet:
+    """Controlador principal de navegación, responsive layout, transiciones y tema dinámico."""
+
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.current_view = None
+        self._current_route = "splash"
+        self._view_seq = 0
+        self._resize_timer: Optional[threading.Timer] = None
+        self.file_picker = FilePickerHelper(page)
+
+        self.page.on_keyboard_event = self._on_keyboard
+        self.page.on_resized = self._on_resized
+
+        self.switcher = ft.AnimatedSwitcher(
+            content=ft.Container(expand=True),
+            expand=True,
+            duration=280,
+            reverse_duration=180,
+            switch_in_curve=ft.AnimationCurve.EASE_OUT_CUBIC,
+            switch_out_curve=ft.AnimationCurve.EASE_IN_CUBIC,
+            transition=ft.AnimatedSwitcherTransition.FADE,
         )
-    
-    def mostrar_modulo_oficios(self, ventana):
-        """Muestra el módulo de oficios"""
-        if self.oficios_view is None:
-            self.oficios_view = OficiosView(
-                ventana,
-                lambda: self.volver_a_seleccion(ventana),
-                lambda: self.cerrar_sesion_handler(ventana)
-            )
+        self.page.add(self.switcher)
+
+    def _on_keyboard(self, e: ft.KeyboardEvent):
+        if self.current_view and hasattr(self.current_view, "handle_keyboard"):
+            self.current_view.handle_keyboard(e)
+
+    def _on_resized(self, _=None):
+        if self._resize_timer:
+            try:
+                self._resize_timer.cancel()
+            except Exception:
+                pass
+        self._resize_timer = threading.Timer(0.08, self._aplicar_resize)
+        self._resize_timer.daemon = True
+        self._resize_timer.start()
+
+    def _aplicar_resize(self):
+        vista = self.current_view
+        if vista and hasattr(vista, "on_resize"):
+            w, h = get_viewport_size(self.page)
+            try:
+                vista.on_resize(w, h, update_ui=True)
+            except TypeError:
+                vista.on_resize(w, h)
+            except Exception:
+                pass
+
+    def _montar_vista(self, vista, route: str, state: Optional[dict] = None):
+        if self.current_view and hasattr(self.current_view, "dispose"):
+            try:
+                self.current_view.dispose()
+            except Exception:
+                pass
+        self.current_view = vista
+        self._current_route = route
+        self._view_seq += 1
+
+        self.switcher.content = ft.Container(
+            key=f"view-{self._view_seq}",
+            expand=True,
+            content=vista.build(),
+        )
+        restored = False
+        if state and hasattr(vista, "restore_state"):
+            try:
+                vista.restore_state(state)
+                restored = True
+            except Exception as e:
+                print(f"[WARN] Error restaurando estado en {route}: {e}")
+
+        if hasattr(vista, "on_resize"):
+            w, h = get_viewport_size(self.page)
+            try:
+                vista.on_resize(w, h, update_ui=False)
+            except TypeError:
+                vista.on_resize(w, h)
+            except Exception:
+                pass
+
+        try:
+            self.switcher.update()
+            self.page.update()
+        except Exception:
+            pass
+
+        if hasattr(vista, "on_mount"):
+            try:
+                vista.on_mount(restoring=restored)
+            except TypeError:
+                vista.on_mount()
+
+    def set_theme(self, nuevo_tema: str):
+        """Aplica dinámicamente el tema Claro/Oscuro, lo persiste y preserva el estado de la vista actual."""
+        tema = "dark" if nuevo_tema == "dark" else "light"
+        settings.guardar_tema(tema)
+
+        self.page.theme_mode = ft.ThemeMode.DARK if tema == "dark" else ft.ThemeMode.LIGHT
+        self.page.bgcolor = get_palette()["bg_app"]
+
+        state = None
+        if self.current_view and hasattr(self.current_view, "get_state"):
+            try:
+                state = self.current_view.get_state()
+            except Exception:
+                state = None
+
+        route = self._current_route
+        if route == "login":
+            self.mostrar_login(state=state)
+        elif route == "selection":
+            self.mostrar_seleccion(state=state)
+        elif route == "docentes":
+            self.mostrar_docentes(state=state)
+        elif route == "oficios":
+            self.mostrar_oficios(state=state)
+        elif route == "acerca_de":
+            self.mostrar_acerca_de(state=state)
         else:
-            self.oficios_view.refrescar_vista()
-    
-    def volver_a_seleccion(self, ventana):
-        """
-        Vuelve a la pantalla de selección de módulo
-        Args:
-            ventana: Ventana principal
-        """
-        settings.cargar_configuracion()
-        from ui.styles import configurar_estilos
-        configurar_estilos(ventana)
-        mostrar_seleccion(ventana, settings.nombre_usuario_actual,
-                         lambda: self.mostrar_modulo_docentes(ventana),
-                         lambda: self.mostrar_modulo_oficios(ventana),
-                         lambda: self.mostrar_acerca_de(ventana))
-    
-    def mostrar_acerca_de(self, ventana):
-        """
-        Muestra la pantalla de Acerca de
-        Args:
-            ventana: Ventana principal
-        """
-        if self.acerca_de_view is None:
-            self.acerca_de_view = AcercaDeView(
-                ventana,
-                lambda: self.volver_a_seleccion(ventana)
-            )
-        else:
-            self.acerca_de_view.refrescar_vista()
-    
-    def cerrar_sesion_handler(self, ventana):
-        """
-        Maneja el cierre de sesión
-        Args:
-            ventana: Ventana principal
-        """
-        cerrar_sesion(ventana, lambda v: mostrar_login(v, self.on_login_success))
-    
-    def run(self):
-        """Inicia el loop principal de la aplicación"""
-        self.root.mainloop()
+            try:
+                self.page.update()
+            except Exception:
+                pass
+
+    def toggle_theme(self):
+        nuevo = "light" if settings.theme == "dark" else "dark"
+        self.set_theme(nuevo)
+
+    def mostrar_splash(self):
+        self._montar_vista(
+            SplashView(self.page, on_complete=self.mostrar_login),
+            route="splash",
+        )
+
+    def mostrar_login(self, state: Optional[dict] = None):
+        self._montar_vista(
+            LoginView(
+                self.page,
+                self.on_login_success,
+                on_toggle_theme=self.toggle_theme,
+            ),
+            route="login",
+            state=state,
+        )
+
+    def on_login_success(self, nombre_usuario: str):
+        settings.nombre_usuario_actual = nombre_usuario
+        self.mostrar_carga(nombre_usuario)
+
+    def mostrar_carga(self, nombre_usuario: str):
+        self._montar_vista(
+            LoadingView(
+                self.page,
+                nombre_usuario,
+                on_complete=lambda: self.mostrar_seleccion(nombre_usuario),
+            ),
+            route="loading",
+        )
+
+    def mostrar_seleccion(self, nombre_usuario: Optional[str] = None, state: Optional[dict] = None):
+        usuario = nombre_usuario or settings.nombre_usuario_actual or "Usuario"
+        self._montar_vista(
+            SelectionView(
+                self.page,
+                self.file_picker,
+                usuario,
+                on_docentes=self.mostrar_docentes,
+                on_oficios=self.mostrar_oficios,
+                on_acerca_de=self.mostrar_acerca_de,
+                on_cerrar_sesion=self.cerrar_sesion,
+                on_toggle_theme=self.toggle_theme,
+                on_set_theme=self.set_theme,
+            ),
+            route="selection",
+            state=state,
+        )
+
+    def mostrar_docentes(self, state: Optional[dict] = None):
+        self._montar_vista(
+            DocentesView(
+                self.page,
+                self.file_picker,
+                on_volver=lambda: self.mostrar_seleccion(),
+                on_cerrar_sesion=self.cerrar_sesion,
+                on_toggle_theme=self.toggle_theme,
+            ),
+            route="docentes",
+            state=state,
+        )
+
+    def mostrar_oficios(self, state: Optional[dict] = None):
+        self._montar_vista(
+            OficiosView(
+                self.page,
+                self.file_picker,
+                on_volver=lambda: self.mostrar_seleccion(),
+                on_cerrar_sesion=self.cerrar_sesion,
+                on_toggle_theme=self.toggle_theme,
+            ),
+            route="oficios",
+            state=state,
+        )
+
+    def mostrar_acerca_de(self, state: Optional[dict] = None):
+        self._montar_vista(
+            AcercaDeView(
+                self.page,
+                on_volver=lambda: self.mostrar_seleccion(),
+                on_toggle_theme=self.toggle_theme,
+            ),
+            route="acerca_de",
+            state=state,
+        )
+
+    def cerrar_sesion(self):
+        settings.nombre_usuario_actual = ""
+        self.mostrar_login()
 
 
-def main():
-    """Función principal"""
-    app = AppBuscador()
-    app.run()
+def main(page: ft.Page):
+    """Configura la ventana de escritorio con el tema persistido e inicia la aplicación."""
+    settings.cargar_configuracion()
+    tema_inicial = settings.theme if settings.theme in ("light", "dark") else "light"
+
+    page.title = "BuscadorApp — Gestión de Doctorados y Oficios"
+    page.theme_mode = ft.ThemeMode.DARK if tema_inicial == "dark" else ft.ThemeMode.LIGHT
+    page.theme = ft.Theme(color_scheme_seed=LIGHT_PALETTE["primary"], font_family="Segoe UI")
+    page.dark_theme = ft.Theme(color_scheme_seed=DARK_PALETTE["primary"], font_family="Segoe UI")
+    page.padding = 0
+    page.bgcolor = get_palette()["bg_app"]
+    page.window.maximized = True
+    page.window.min_width = 760
+    page.window.min_height = 560
+
+    icon_path = resource_path("imagenes/logouce.png")
+    if os.path.exists(icon_path):
+        page.window.icon = icon_path
+
+    app = AppFlet(page)
+    app.mostrar_splash()
 
 
 if __name__ == "__main__":
-    main()
+    ft.app(target=main)
